@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import { createTask, deleteTask, getAllTasks, updateTask } from "./store.js";
+import { pendoTrack } from "./pendo.js";
 
 const app = express();
 const corsOrigin = process.env.CORS_ORIGIN?.split(",").map((s) => s.trim());
@@ -23,10 +24,17 @@ app.get("/api/tasks", (_req, res) => {
 app.post("/api/tasks", (req, res) => {
   const title = validateTitle(req.body?.title);
   if (!title) {
-    res.status(400).json({ error: "title must be a non-empty string up to 200 characters" });
+    res
+      .status(400)
+      .json({ error: "title must be a non-empty string up to 200 characters" });
     return;
   }
-  res.status(201).json({ task: createTask(title) });
+  const task = createTask(title);
+  pendoTrack("Task Created", {
+    task_id: task.id,
+    title_length: task.title.length,
+  });
+  res.status(201).json({ task });
 });
 
 app.patch("/api/tasks/:id", (req, res) => {
@@ -44,7 +52,11 @@ app.patch("/api/tasks/:id", (req, res) => {
   if (rawTitle !== undefined) {
     const title = validateTitle(rawTitle);
     if (!title) {
-      res.status(400).json({ error: "title must be a non-empty string up to 200 characters" });
+      res
+        .status(400)
+        .json({
+          error: "title must be a non-empty string up to 200 characters",
+        });
       return;
     }
     patch.title = title;
@@ -62,6 +74,14 @@ app.patch("/api/tasks/:id", (req, res) => {
     res.status(404).json({ error: "task not found" });
     return;
   }
+  pendoTrack("Task Updated", {
+    task_id: task.id,
+    title_changed: rawTitle !== undefined,
+    done_changed: rawDone !== undefined,
+  });
+  if (rawDone === true) {
+    pendoTrack("Task Completed", { task_id: task.id });
+  }
   res.json({ task });
 });
 
@@ -70,6 +90,7 @@ app.delete("/api/tasks/:id", (req, res) => {
     res.status(404).json({ error: "task not found" });
     return;
   }
+  pendoTrack("Task Deleted", { task_id: req.params.id });
   res.status(204).end();
 });
 
